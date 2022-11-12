@@ -1,4 +1,9 @@
 #include "systemcalls.h"
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <string.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -9,13 +14,29 @@
 */
 bool do_system(const char *cmd)
 {
+    int return_sys;
 
-/*
- * TODO  add your code here
- *  Call the system() function with the command set in the cmd
- *   and return a boolean true if the system() call completed with success
- *   or false() if it returned a failure
-*/
+    // If the command going into system() is NULL, it checks if the shell is available
+    if(cmd == NULL)
+    {
+        if(system(cmd) != 0)
+        {
+            // shell is available
+        }
+        else
+        {
+            // shell is unavailable
+        }
+    }
+    else
+    {
+        return_sys = system(cmd);
+        // check for error codes: -1 issues with child process, 127 if shell could not execute
+        if(return_sys == -1 || return_sys == 127)
+        {
+            return false;
+        }
+    }
 
     return true;
 }
@@ -40,6 +61,9 @@ bool do_exec(int count, ...)
     va_start(args, count);
     char * command[count+1];
     int i;
+    pid_t pid;
+    int child_exit_status;
+    int child_return_val;
     for(i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
@@ -49,15 +73,35 @@ bool do_exec(int count, ...)
     // and may be removed
     command[count] = command[count];
 
-/*
- * TODO:
- *   Execute a system command by calling fork, execv(),
- *   and wait instead of system (see LSP page 161).
- *   Use the command[0] as the full path to the command to execute
- *   (first argument to execv), and use the remaining arguments
- *   as second argument to the execv() command.
- *
-*/
+    // initial checks
+    if(command == NULL)
+    {
+        return false;
+    }
+
+    // fork a process
+    pid = fork();
+
+    // failure to fork, return
+    if( pid == -1)
+    {
+        return false;
+    }
+    // we are the child process, do the command
+    else if(pid == 0)
+    {
+        child_return_val = execv(command[0], command);
+        exit(child_return_val);
+    }
+    // we are the parent process, wait then return child status
+    else
+    {
+        wait(&child_exit_status);
+        if(WIFEXITED(child_exit_status))
+        {
+            return WEXITSTATUS(child_exit_status) == 0;
+        }
+    }
 
     va_end(args);
 
@@ -75,6 +119,10 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     va_start(args, count);
     char * command[count+1];
     int i;
+    pid_t pid;
+    int fd;
+    int child_exit_status;
+    int child_return_val;
     for(i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
@@ -84,14 +132,57 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     // and may be removed
     command[count] = command[count];
 
+    // initial checks
+    if(command == NULL)
+    {
+        return false;
+    }
 
-/*
- * TODO
- *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
- *   redirect standard out to a file specified by outputfile.
- *   The rest of the behaviour is same as do_exec()
- *
-*/
+    // attempt to open the file specified
+    fd = open(outputfile, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+
+    // file open failed
+    if( fd < 0)
+    {
+        return false;
+    }
+
+    // fork a process
+    pid = fork();
+
+    // failure to fork, return
+    if( pid == -1)
+    {
+        return false;
+    }
+    // we are the child process, do the command
+    else if(pid == 0)
+    {
+        // try to redirect standard out to the file
+        if(dup2(fd, STDOUT_FILENO) < 0)
+        {
+            // failed
+            return false;
+        }
+
+        // close the file
+        close(fd);
+
+        // execute the command
+        child_return_val = execv(command[0], command);
+        exit(child_return_val);
+    }
+    // we are the parent process, wait then return child status
+    else
+    {
+        close(fd);
+        wait(&child_exit_status);
+
+        if(WIFEXITED(child_exit_status))
+        {
+            return WEXITSTATUS(child_exit_status) == 0;
+        }
+    }
 
     va_end(args);
 
