@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <pthread.h>
+#include <unistd.h>
 
 /**
  * This structure should be dynamically allocated and passed as
@@ -19,7 +20,10 @@ struct thread_data{
      * Set to true if the thread completed with success, false
      * if an error occurred.
      */
-    bool thread_complete_success;
+    bool thread_complete_success; // thread completion
+    useconds_t wait_to_obtain_ms; // time to wait before locking mutex
+    useconds_t wait_to_release_ms; // time to wait before unlocking mutex
+    pthread_mutex_t * mutex; // pointer to the mutex
 };
 
 
