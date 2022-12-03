@@ -17,9 +17,6 @@
 
 static bool graceful_exit = false;
 
-// TODO:
-//      Daemon mode
-
 static void signal_handler(int signal_number);
 static void cleanup(FILE * file_pointer, int socket_handle, int connected_handle, int exit_status);
 
