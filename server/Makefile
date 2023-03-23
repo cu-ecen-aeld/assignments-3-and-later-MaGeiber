@@ -4,7 +4,7 @@ TARGET?=aesdsocket
 LDFLAGS?=-pthread -lrt
 OBJS?=$(TARGET).o
 
-default all: $(TARGET)
-	$(CC) $(CFLAGS) $(OBJS) -o $(TARGET) $(INCLUDES) $(LDFLAGS)
+default all: $(OBJS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(INCLUDES) $(LDFLAGS)
 clean:
 	rm -f *.o $(TARGET)
