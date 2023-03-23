@@ -1,10 +1,10 @@
 CC?=$(CROSS_COMPILE)gcc
 CFLAGS?=-I.
-FILENAME?=aesdsocket
 TARGET?=aesdsocket
-LDFLAGS?=-lpthread -lrt
+LDFLAGS?=-pthread -lrt
+OBJS?=$(TARGET).o
 
-default all: $(FILENAME).o
-	$(CC) $(CFLAGS) $^ -o $@ $(INCLUDES) $(LDFLAGS)
+default all: $(TARGET)
+	$(CC) $(CFLAGS) $(OBJS) -o $(TARGET) $(INCLUDES) $(LDFLAGS)
 clean:
-	rm -f *.o $(FILENAME)
+	rm -f *.o $(TARGET)
