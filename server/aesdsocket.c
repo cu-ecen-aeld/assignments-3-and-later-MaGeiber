@@ -346,7 +346,7 @@ static void * socket_thread(void * args)
         {
             //fprintf(stdout, "Received error: %ld, errno: %d\n", bytes_received, errno);
             thread_args->done_flag = true;
-            pthread_exit(0);
+            return 0;
         }
         else
         {
@@ -371,7 +371,7 @@ static void * socket_thread(void * args)
             {
                 syslog(LOG_ERR, "Failed to append to file!");
                 thread_args->done_flag = true;
-                pthread_exit(0);
+                return 0;
             }
             //fprintf(stdout, "Stored message\n");
             buffer_bytes_used = 0;
@@ -413,7 +413,7 @@ static void * socket_thread(void * args)
             {
                 //fprintf(stdout, "Send Failure, return val: %ld\n", send_return);
                 thread_args->done_flag = true;
-                pthread_exit(0);
+                return 0;
             }
         }
         bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, thread_args->file_pointer);
@@ -423,7 +423,7 @@ static void * socket_thread(void * args)
     //fprintf(stdout, "Done sending\n");
 
     thread_args->done_flag = true;
-    pthread_exit(0);
+    return 0;
 }
 
 static void timer_signal()
