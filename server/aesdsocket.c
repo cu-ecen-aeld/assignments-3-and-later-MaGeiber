@@ -15,8 +15,11 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#define USE_AESD_CHAR_DEVICE 1
+
 #define SOCK_PORT "9000"
 #define CONN_FILE "/var/tmp/aesdsocketdata"
+#define AESD_DEVICE "/dev/aesdchar"
 #define BUFFER_SIZE 1024
 
 static bool graceful_exit = false;
@@ -90,8 +93,16 @@ int main(int argc, char *argv[])
         hint.ai_socktype = SOCK_STREAM;
         hint.ai_family = AF_INET;
 
-        // open the file to append to
-        fp = fopen(CONN_FILE, "a+");
+        // open the file/device to append to
+        if(USE_AESD_CHAR_DEVICE)
+        {
+            fp = fopen(AESD_DEVICE, "a+");
+        }
+        else
+        {
+            fp = fopen(CONN_FILE, "a+");
+        }
+        
         if(fp == NULL)
         {
             // failure to open file for appending
@@ -154,14 +165,17 @@ int main(int argc, char *argv[])
             }
         }
 
-        // register alarm signal handler
-        struct itimerval timestamp_itimer;
-        timestamp_itimer.it_value.tv_sec = 10;
-        timestamp_itimer.it_value.tv_usec = 0;
-        timestamp_itimer.it_interval.tv_sec = 10;
-        timestamp_itimer.it_interval.tv_usec = 0;
-        setitimer(ITIMER_REAL, &timestamp_itimer, NULL);
-        signal(SIGALRM, timer_signal);
+        // register alarm signal handler if not using aesdchar device
+        if(USE_AESD_CHAR_DEVICE != 1)
+        {
+            struct itimerval timestamp_itimer;
+            timestamp_itimer.it_value.tv_sec = 10;
+            timestamp_itimer.it_value.tv_usec = 0;
+            timestamp_itimer.it_interval.tv_sec = 10;
+            timestamp_itimer.it_interval.tv_usec = 0;
+            setitimer(ITIMER_REAL, &timestamp_itimer, NULL);
+            signal(SIGALRM, timer_signal);
+        }
 
         // free the malloc'd memory
         freeaddrinfo(returned_addr_info);
@@ -311,7 +325,11 @@ static void cleanup(FILE * file_pointer, int socket_handle, int connected_handle
         fclose(file_pointer);
     }
 
-    remove(CONN_FILE);
+    if(USE_AESD_CHAR_DEVICE != 1)
+    {
+        remove(CONN_FILE);
+    }
+    
     exit(exit_status);
 }
 

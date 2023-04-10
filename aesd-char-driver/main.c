@@ -37,6 +37,8 @@ int aesd_open(struct inode *inode, struct file *filp)
 
     aesd_circular_buffer_init(&dev->circ_buffer);
     mutex_init(&dev->lock);
+    dev->kernel_buffer = NULL;
+    dev->kernel_buffer_size = 0;
 
     filp->private_data = dev;
     return 0;
@@ -60,6 +62,8 @@ int aesd_release(struct inode *inode, struct file *filp)
     
     // destroy mutex
     mutex_destroy(&dev->lock);
+
+    kfree(&dev->kernel_buffer);
     
     return 0;
 }
@@ -134,6 +138,10 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 {
     ssize_t retval = -ENOMEM;
     int mutex_ret;
+    size_t bytes_copied_from_user;
+    size_t i;
+    bool newline_found;
+    struct aesd_buffer_entry temp_buffer_entry;
 
     struct aesd_dev *dev = filp->private_data;
 
@@ -146,19 +154,65 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     if(mutex_ret != 0)
     {
         // couldn't lock the mutex, something happened, return a fault
-        return -EFAULT;
+        PDEBUG("Failure to lock mutex in aesd_write");
+        retval = -EFAULT;
+        goto release_mutex;
+    }
+
+    // attempt to allocate enough buffer space for data, if the last command didn't finish, get more memory
+    dev->kernel_buffer_size += count;
+    dev->kernel_buffer = krealloc(dev->kernel_buffer, dev->kernel_buffer_size, GFP_KERNEL);
+    
+    if(dev->kernel_buffer == NULL)
+    {
+        PDEBUG("Failure to allocate enough memory in aesd_write");
+        retval = -ENOMEM;
+        goto release_mutex;
     }
 
     // copy data to kernel space
-    //copy_from_user()
+    bytes_copied_from_user = copy_from_user(dev->kernel_buffer, buf, count);
+    if(bytes_copied_from_user > 0)
+    {
+        // failed to copy all of the user buffer
+        PDEBUG("Failure to copy memory from user in aesd_write");
+        retval = -EFAULT;
+        goto free_mem;
+    }
 
-    // check for newline
+    // check the current buffer for a newline
+    newline_found = false;
+    for(i = 0; i < dev->kernel_buffer_size; i++)
+    {
+        if(dev->kernel_buffer[i] == '\n')
+        {
+            PDEBUG("Found newline in command");
+            newline_found = true;
+        }
+    }
 
-    // add entry to circular buffer
-    // aesd_circular_buffer_add_entry()
+    // add entry to circular buffer if the newline was found, otherwise release mutex and move on
+    if(newline_found)
+    {
+        PDEBUG("Adding entry to circular buffer, length %zu", i);
+        // need to free memory of the last entry if the buffer is full and we are adding
+        if(dev->circ_buffer.full)
+        {
+            PDEBUG("Buffer was full, freeing oldest entry");
+            kfree(dev->circ_buffer.entry[dev->circ_buffer.out_offs].buffptr);
+        }
+        temp_buffer_entry.buffptr = dev->kernel_buffer;
+        temp_buffer_entry.size = i + 1;
+        aesd_circular_buffer_add_entry(&dev->circ_buffer, &temp_buffer_entry);
+        dev->kernel_buffer_size = 0;
+    }
+    goto release_mutex;
+    
 
-    // free any allocated memory
+    // free any allocated memory, in error cases
     free_mem:
+        kfree(dev->kernel_buffer);
+        dev->kernel_buffer_size = 0;
 
     // release mutex, always
     release_mutex:
