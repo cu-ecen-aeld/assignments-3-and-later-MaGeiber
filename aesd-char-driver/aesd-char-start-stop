@@ -2,11 +2,11 @@
 
 case "$1" in
     start)
-        echo "Starting aesdsocket"
+        echo "Starting aesdchar driver"
         /usr/bin/aesdchar_load
         ;;
     stop)
-        echo "Stopping aesdsocket"
+        echo "Stopping aesdchar driver"
         /usr/bin/aesdchar_unload
         ;;
     *)
