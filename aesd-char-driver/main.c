@@ -35,35 +35,13 @@ int aesd_open(struct inode *inode, struct file *filp)
     
     dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
 
-    aesd_circular_buffer_init(&dev->circ_buffer);
-    mutex_init(&dev->lock);
-    dev->kernel_buffer = NULL;
-    dev->kernel_buffer_size = 0;
-
     filp->private_data = dev;
     return 0;
 }
 
 int aesd_release(struct inode *inode, struct file *filp)
 {
-    struct aesd_dev *dev;
-    uint8_t index;
-    struct aesd_buffer_entry *entry;
-
     PDEBUG("release");
-
-    dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
-
-    // free memory used by circular buffer
-    AESD_CIRCULAR_BUFFER_FOREACH(entry,&dev->circ_buffer,index)
-    {
-        kfree(entry->buffptr);
-    }
-    
-    // destroy mutex
-    mutex_destroy(&dev->lock);
-
-    kfree(&dev->kernel_buffer);
     
     return 0;
 }
@@ -259,6 +237,10 @@ int aesd_init_module(void)
     /**
      * TODO: initialize the AESD specific portion of the device
      */
+    aesd_circular_buffer_init(&aesd_device.circ_buffer);
+    mutex_init(&aesd_device.lock);
+    aesd_device.kernel_buffer = NULL;
+    aesd_device.kernel_buffer_size = 0;
 
     result = aesd_setup_cdev(&aesd_device);
 
@@ -271,6 +253,9 @@ int aesd_init_module(void)
 
 void aesd_cleanup_module(void)
 {
+    uint8_t index;
+    struct aesd_buffer_entry *entry;
+
     dev_t devno = MKDEV(aesd_major, aesd_minor);
 
     cdev_del(&aesd_device.cdev);
@@ -278,6 +263,17 @@ void aesd_cleanup_module(void)
     /**
      * TODO: cleanup AESD specific poritions here as necessary
      */
+
+    // free memory used by circular buffer
+    AESD_CIRCULAR_BUFFER_FOREACH(entry, &aesd_device.circ_buffer, index)
+    {
+        kfree(entry->buffptr);
+    }
+    
+    // destroy mutex
+    mutex_destroy(&aesd_device.lock);
+
+    kfree(&aesd_device.kernel_buffer);
 
     unregister_chrdev_region(devno, 1);
 }
