@@ -81,8 +81,8 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     // determine how much to copy to user buffer
     bytes_in_entry = read_entry->size - entry_offset_byte;
 
-    // if more bytes were requested than are in the entry, read out the requested and update f_pos
-    if(bytes_in_entry > count)
+    // if more bytes were in the entry than the requested count, read out the count and update f_pos
+    if(bytes_in_entry >= count)
     {
         bytes_to_copy = count;
         *f_pos += count;
@@ -157,6 +157,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         retval = -EFAULT;
         goto free_mem;
     }
+    retval = count;
 
     // check the current buffer for a newline
     newline_found = false;
@@ -183,6 +184,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         temp_buffer_entry.size = i + 1;
         aesd_circular_buffer_add_entry(&dev->circ_buffer, &temp_buffer_entry);
         dev->kernel_buffer_size = 0;
+        dev->kernel_buffer = NULL;
     }
     goto release_mutex;
     
