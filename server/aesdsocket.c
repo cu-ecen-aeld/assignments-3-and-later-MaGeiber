@@ -97,16 +97,13 @@ int main(int argc, char *argv[])
         if(USE_AESD_CHAR_DEVICE != 1)
         {
             fp = fopen(CONN_FILE, "a+");
+            if(fp == NULL)
+            {
+                // failure to open file for appending
+                syslog(LOG_ERR, "Failed to open the file for appending!");
+                cleanup(fp, socket_handle, connected_handle, -1);
+            }
         }
-        
-        if(fp == NULL)
-        {
-            // failure to open file for appending
-            syslog(LOG_ERR, "Failed to open the file for appending!");
-            cleanup(fp, socket_handle, connected_handle, -1);
-        }
-
-
 
         int get_addr_return = getaddrinfo(NULL, SOCK_PORT, &hint, &returned_addr_info);
         if(get_addr_return != 0)
@@ -345,6 +342,12 @@ static void * socket_thread(void * args)
     if(USE_AESD_CHAR_DEVICE)
     {
         fp = fopen(AESD_DEVICE, "a+");
+        if(fp == NULL)
+        {
+            // failure to open driver
+            syslog(LOG_ERR, "Failed to open the driver!");
+            //cleanup(fp, socket_handle, connected_handle, -1);
+        }
     }
 
     //fprintf(stdout, "Socket Thread: Thread started: %lu!\n", thread_args->thread_id);
