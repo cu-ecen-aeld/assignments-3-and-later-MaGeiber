@@ -93,12 +93,8 @@ int main(int argc, char *argv[])
         hint.ai_socktype = SOCK_STREAM;
         hint.ai_family = AF_INET;
 
-        // open the file/device to append to
-        if(USE_AESD_CHAR_DEVICE)
-        {
-            fp = fopen(AESD_DEVICE, "a+");
-        }
-        else
+        // open the file to append to
+        if(USE_AESD_CHAR_DEVICE != 1)
         {
             fp = fopen(CONN_FILE, "a+");
         }
@@ -329,6 +325,10 @@ static void cleanup(FILE * file_pointer, int socket_handle, int connected_handle
     {
         remove(CONN_FILE);
     }
+    else
+    {
+        fclose(fp);
+    }
     
     exit(exit_status);
 }
@@ -341,6 +341,11 @@ static void * socket_thread(void * args)
     char buffer[BUFFER_SIZE];
     struct socket_thread_args *thread_args;
     thread_args = (struct socket_thread_args *)args;
+
+    if(USE_AESD_CHAR_DEVICE)
+    {
+        fp = fopen(AESD_DEVICE, "a+");
+    }
 
     //fprintf(stdout, "Socket Thread: Thread started: %lu!\n", thread_args->thread_id);
 
@@ -441,6 +446,7 @@ static void * socket_thread(void * args)
     //fprintf(stdout, "Done sending\n");
 
     thread_args->done_flag = true;
+    fclose(fp);
     return 0;
 }
 
