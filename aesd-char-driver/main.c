@@ -18,6 +18,7 @@
 #include <linux/cdev.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/fs.h> // file_operations
 #include "aesdchar.h"
 int aesd_major =   0; // use dynamic major
@@ -120,6 +121,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     size_t i;
     bool newline_found;
     struct aesd_buffer_entry temp_buffer_entry;
+    char *temp_buffer;
 
     struct aesd_dev *dev = filp->private_data;
 
@@ -138,10 +140,11 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
 
     // attempt to allocate enough buffer space for data, if the last command didn't finish, get more memory
+    temp_buffer = kmalloc(count, GFP_KERNEL);
     dev->kernel_buffer_size += count;
     dev->kernel_buffer = krealloc(dev->kernel_buffer, dev->kernel_buffer_size, GFP_KERNEL);
     
-    if(dev->kernel_buffer == NULL)
+    if(dev->kernel_buffer == NULL || temp_buffer == NULL)
     {
         PDEBUG("Failure to allocate enough memory in aesd_write");
         retval = -ENOMEM;
@@ -149,7 +152,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
 
     // copy data to kernel space
-    bytes_copied_from_user = copy_from_user(dev->kernel_buffer, buf, count);
+    bytes_copied_from_user = copy_from_user(temp_buffer, buf, count);
     if(bytes_copied_from_user > 0)
     {
         // failed to copy all of the user buffer
@@ -158,6 +161,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         goto free_mem;
     }
     retval = count;
+
+    // copy the buffer from user space to the in progress buffer
+    strncpy(dev->kernel_buffer, temp_buffer, count);
 
     // check the current buffer for a newline
     newline_found = false;
