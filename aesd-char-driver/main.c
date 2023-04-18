@@ -163,7 +163,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     retval = count;
 
     // copy the buffer from user space to the in progress buffer
-    strncpy(dev->kernel_buffer, temp_buffer, count);
+    strncat(dev->kernel_buffer, temp_buffer, count);
 
     // check the current buffer for a newline
     newline_found = false;
