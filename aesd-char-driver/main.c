@@ -118,6 +118,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     ssize_t retval = -ENOMEM;
     int mutex_ret;
     size_t bytes_copied_from_user;
+    size_t prior_bytes_count;
     size_t i;
     bool newline_found;
     struct aesd_buffer_entry temp_buffer_entry;
@@ -141,6 +142,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     // attempt to allocate enough buffer space for data, if the last command didn't finish, get more memory
     temp_buffer = kmalloc(count, GFP_KERNEL);
+    prior_bytes_count = dev->kernel_buffer_size;
     dev->kernel_buffer_size += count;
     dev->kernel_buffer = krealloc(dev->kernel_buffer, dev->kernel_buffer_size, GFP_KERNEL);
     
@@ -163,7 +165,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     retval = count;
 
     // copy the buffer from user space to the in progress buffer
-    strncat(dev->kernel_buffer, temp_buffer, count);
+    memcpy(&dev->kernel_buffer[prior_bytes_count], temp_buffer, count);
+    kfree(temp_buffer);
 
     // check the current buffer for a newline
     newline_found = false;
@@ -199,6 +202,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     free_mem:
         kfree(dev->kernel_buffer);
         dev->kernel_buffer_size = 0;
+        kfree(temp_buffer);
 
     // release mutex, always
     release_mutex:
