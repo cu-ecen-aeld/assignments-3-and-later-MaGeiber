@@ -115,11 +115,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     ssize_t retval = -ENOMEM;
     int mutex_ret;
     size_t bytes_not_copied_from_user;
-    size_t prior_bytes_count;
     size_t i;
     bool newline_found;
     struct aesd_buffer_entry temp_buffer_entry;
-    char *temp_buffer;
 
     struct aesd_dev *dev = filp->private_data;
 
@@ -138,12 +136,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
 
     // attempt to allocate enough buffer space for data, if the last command didn't finish, get more memory
-    temp_buffer = kmalloc(count, GFP_KERNEL);
-    prior_bytes_count = dev->kernel_buffer_size;
-    dev->kernel_buffer_size += count;
-    dev->kernel_buffer = krealloc(dev->kernel_buffer, dev->kernel_buffer_size, GFP_KERNEL);
+    dev->kernel_buffer = krealloc(dev->kernel_buffer, dev->kernel_buffer_size + count, GFP_KERNEL);
     
-    if(dev->kernel_buffer == NULL || temp_buffer == NULL)
+    if(dev->kernel_buffer == NULL)
     {
         PDEBUG("Failure to allocate enough memory in aesd_write");
         retval = -ENOMEM;
@@ -151,12 +146,11 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
 
     // copy data to kernel space
-    bytes_not_copied_from_user = copy_from_user(temp_buffer, buf, count);
+    bytes_not_copied_from_user = copy_from_user(dev->kernel_buffer + dev->kernel_buffer_size, buf, count);
     retval = count - bytes_not_copied_from_user;
 
-    // copy the buffer from user space to the in progress buffer
-    memcpy(&dev->kernel_buffer[prior_bytes_count], temp_buffer, count);
-    kfree(temp_buffer);
+    // update buffer size
+    dev->kernel_buffer_size += retval;
 
     // check the current buffer for a newline
     newline_found = false;
@@ -185,7 +179,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->kernel_buffer_size = 0;
         dev->kernel_buffer = NULL;
     }
-    goto release_mutex;
 
     // release mutex, always
     release_mutex:
@@ -214,8 +207,6 @@ static int aesd_setup_cdev(struct aesd_dev *dev)
     return err;
 }
 
-
-
 int aesd_init_module(void)
 {
     dev_t dev = 0;
@@ -243,7 +234,6 @@ int aesd_init_module(void)
         unregister_chrdev_region(dev, 1);
     }
     return result;
-
 }
 
 void aesd_cleanup_module(void)
@@ -272,8 +262,6 @@ void aesd_cleanup_module(void)
 
     unregister_chrdev_region(devno, 1);
 }
-
-
 
 module_init(aesd_init_module);
 module_exit(aesd_cleanup_module);
