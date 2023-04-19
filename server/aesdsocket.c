@@ -339,17 +339,6 @@ static void * socket_thread(void * args)
     struct socket_thread_args *thread_args;
     thread_args = (struct socket_thread_args *)args;
 
-    if(USE_AESD_CHAR_DEVICE)
-    {
-        fp = fopen(AESD_DEVICE, "a+");
-        if(fp == NULL)
-        {
-            // failure to open driver
-            syslog(LOG_ERR, "Failed to open the driver!");
-            //cleanup(fp, socket_handle, connected_handle, -1);
-        }
-    }
-
     //fprintf(stdout, "Socket Thread: Thread started: %lu!\n", thread_args->thread_id);
 
     // receive data from connection and append to file
@@ -388,8 +377,21 @@ static void * socket_thread(void * args)
             int store_return;
             
             pthread_mutex_lock(thread_args->file_mutex);
+
+            if(USE_AESD_CHAR_DEVICE)
+            {
+                fp = fopen(AESD_DEVICE, "a+");
+                if(fp == NULL)
+                {
+                    // failure to open driver
+                    syslog(LOG_ERR, "Failed to open the driver!");
+                    //cleanup(fp, socket_handle, connected_handle, -1);
+                }
+            }
             //fprintf(stdout, "Socket Thread: Grabbed mutex, writing data!\n");
             store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, thread_args->file_pointer);
+            fclose(fp);
+
             pthread_mutex_unlock(thread_args->file_mutex);
             //fprintf(stdout, "Socket Thread: Mutex unlocked!\n");
 
@@ -409,13 +411,24 @@ static void * socket_thread(void * args)
     pthread_mutex_lock(thread_args->file_mutex);
     //fprintf(stdout, "Socket Thread: Grabbed mutex, reading back!\n");
     // send content of file back to sender
-    int seek_return = fseek(thread_args->file_pointer, 0, SEEK_SET);
-    if(seek_return < 0)
-    {
-        //fprintf(stdout, "Failed to seek while reading: %d\n", errno);
-    }
+    // int seek_return = fseek(thread_args->file_pointer, 0, SEEK_SET);
+    // if(seek_return < 0)
+    // {
+    //     //fprintf(stdout, "Failed to seek while reading: %d\n", errno);
+    // }
     ssize_t bytes_sent = 0;
     memset(&buffer, 0, sizeof(buffer));
+    
+    if(USE_AESD_CHAR_DEVICE)
+    {
+        fp = fopen(AESD_DEVICE, "r");
+        if(fp == NULL)
+        {
+            // failure to open driver
+            syslog(LOG_ERR, "Failed to open the driver!");
+            //cleanup(fp, socket_handle, connected_handle, -1);
+        }
+    }
     size_t bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, thread_args->file_pointer);
     
     //fprintf(stdout, "Socket Thread: Unlocked mutex!\n");
