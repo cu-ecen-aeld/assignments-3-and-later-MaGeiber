@@ -337,6 +337,7 @@ static void * socket_thread(void * args)
     size_t buffer_bytes_remaining;
     char buffer[BUFFER_SIZE];
     struct socket_thread_args *thread_args;
+    int store_return;
     thread_args = (struct socket_thread_args *)args;
 
     //fprintf(stdout, "Socket Thread: Thread started: %lu!\n", thread_args->thread_id);
@@ -344,7 +345,7 @@ static void * socket_thread(void * args)
     // receive data from connection and append to file
     buffer_bytes_used = 0;
     memset(&buffer, 0, sizeof(buffer));
-    bool found_newline = false;
+    //bool found_newline = false;
     do
     {
         bytes_received = 0;
@@ -370,42 +371,40 @@ static void * socket_thread(void * args)
 
         // check the buffer for newline, append when newline hit
         // check if buffer is full, flush to file, start over
-        found_newline = (strchr(buffer, '\n') != NULL) ? true : false;
-        if(found_newline || buffer_bytes_used >= BUFFER_SIZE)
+        //found_newline = (strchr(buffer, '\n') != NULL) ? true : false;
+
+        //fprintf(stdout, "Found newline: %d\n", found_newline);
+        
+        pthread_mutex_lock(thread_args->file_mutex);
+
+        if(USE_AESD_CHAR_DEVICE)
         {
-            //fprintf(stdout, "Found newline: %d\n", found_newline);
-            int store_return;
-            
-            pthread_mutex_lock(thread_args->file_mutex);
-
-            if(USE_AESD_CHAR_DEVICE)
+            fp = fopen(AESD_DEVICE, "a+");
+            if(fp == NULL)
             {
-                fp = fopen(AESD_DEVICE, "a+");
-                if(fp == NULL)
-                {
-                    // failure to open driver
-                    syslog(LOG_ERR, "Failed to open the driver!");
-                    //cleanup(fp, socket_handle, connected_handle, -1);
-                }
+                // failure to open driver
+                syslog(LOG_ERR, "Failed to open the driver!");
+                //cleanup(fp, socket_handle, connected_handle, -1);
             }
-            //fprintf(stdout, "Socket Thread: Grabbed mutex, writing data!\n");
-            store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, thread_args->file_pointer);
-            fclose(fp);
-
-            pthread_mutex_unlock(thread_args->file_mutex);
-            //fprintf(stdout, "Socket Thread: Mutex unlocked!\n");
-
-            if(store_return == EOF)
-            {
-                syslog(LOG_ERR, "Failed to append to file!");
-                thread_args->done_flag = true;
-                return 0;
-            }
-            //fprintf(stdout, "Stored message\n");
-            buffer_bytes_used = 0;
-            memset(&buffer, 0, sizeof(buffer));
         }
-    } while (bytes_received > 0 && !found_newline);
+        //fprintf(stdout, "Socket Thread: Grabbed mutex, writing data!\n");
+        store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, thread_args->file_pointer);
+        fclose(fp);
+
+        pthread_mutex_unlock(thread_args->file_mutex);
+        //fprintf(stdout, "Socket Thread: Mutex unlocked!\n");
+
+        if(store_return == EOF)
+        {
+            syslog(LOG_ERR, "Failed to append to file!");
+            thread_args->done_flag = true;
+            return 0;
+        }
+        //fprintf(stdout, "Stored message\n");
+        buffer_bytes_used = 0;
+        memset(&buffer, 0, sizeof(buffer));
+
+    } while (bytes_received > 0);
     //fprintf(stdout, "Done receiving\n");
     
     pthread_mutex_lock(thread_args->file_mutex);
@@ -435,7 +434,7 @@ static void * socket_thread(void * args)
     while(bytes_read > 0)
     {
         size_t read_until = bytes_read;
-        char *found_char = strchr(buffer, '\n');
+        //char *found_char = strchr(buffer, '\n');
 
         // iterate through the buffer, until finished sending
         ssize_t send_return = 0;
