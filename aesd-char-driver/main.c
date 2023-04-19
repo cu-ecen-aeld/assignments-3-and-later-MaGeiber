@@ -82,28 +82,25 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     // determine how much to copy to user buffer
     bytes_in_entry = read_entry->size - entry_offset_byte;
 
-    // if more bytes were in the entry than the requested count, read out the count and update f_pos
+    // if more bytes were in the entry than the requested count, read out the requested number of bytes.
+    // otherwise, only read out the bytes in the entry
     if(bytes_in_entry >= count)
     {
         bytes_to_copy = count;
-        *f_pos += count;
     }
     else
     {
         bytes_to_copy = bytes_in_entry;
-        *f_pos += bytes_in_entry;
     }
 
     // copy data to user space
     copy_user_return = copy_to_user(buf, read_entry->buffptr + entry_offset_byte, bytes_to_copy);
-    if(copy_user_return)
-    {
-        retval = -EFAULT;
-        goto release_mutex;
-    }
 
-    // update return value to number of bytes read
-    retval = bytes_to_copy;
+    // update return value to number of bytes read, which would be: number of bytes to copy - bytes that did not copy to user space
+    retval = bytes_to_copy - copy_user_return;
+
+    // update fpos based on the amount of bytes actually copied to user space
+    *f_pos += retval;
 
     // release mutex, always
     release_mutex:
@@ -117,7 +114,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 {
     ssize_t retval = -ENOMEM;
     int mutex_ret;
-    size_t bytes_copied_from_user;
+    size_t bytes_not_copied_from_user;
     size_t prior_bytes_count;
     size_t i;
     bool newline_found;
@@ -154,15 +151,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
 
     // copy data to kernel space
-    bytes_copied_from_user = copy_from_user(temp_buffer, buf, count);
-    if(bytes_copied_from_user > 0)
-    {
-        // failed to copy all of the user buffer
-        PDEBUG("Failure to copy memory from user in aesd_write");
-        retval = -EFAULT;
-        goto free_mem;
-    }
-    retval = count;
+    bytes_not_copied_from_user = copy_from_user(temp_buffer, buf, count);
+    retval = count - bytes_not_copied_from_user;
 
     // copy the buffer from user space to the in progress buffer
     memcpy(&dev->kernel_buffer[prior_bytes_count], temp_buffer, count);
@@ -196,13 +186,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->kernel_buffer = NULL;
     }
     goto release_mutex;
-    
-
-    // free any allocated memory, in error cases
-    free_mem:
-        kfree(dev->kernel_buffer);
-        dev->kernel_buffer_size = 0;
-        kfree(temp_buffer);
 
     // release mutex, always
     release_mutex:
