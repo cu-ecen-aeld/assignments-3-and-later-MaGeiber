@@ -84,7 +84,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 
     // if more bytes were in the entry than the requested count, read out the requested number of bytes.
     // otherwise, only read out the bytes in the entry
-    if(bytes_in_entry >= count)
+    if(bytes_in_entry > count)
     {
         bytes_to_copy = count;
     }
