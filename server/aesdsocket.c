@@ -379,7 +379,7 @@ static void * socket_thread(void * args)
 
         if(USE_AESD_CHAR_DEVICE)
         {
-            fp = fopen(AESD_DEVICE, "a+");
+            fp = fopen(AESD_DEVICE, "ab");
             if(fp == NULL)
             {
                 // failure to open driver
