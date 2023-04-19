@@ -174,7 +174,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             kfree(dev->circ_buffer.entry[dev->circ_buffer.out_offs].buffptr);
         }
         temp_buffer_entry.buffptr = dev->kernel_buffer;
-        temp_buffer_entry.size = i + 1;
+        temp_buffer_entry.size = i;
         aesd_circular_buffer_add_entry(&dev->circ_buffer, &temp_buffer_entry);
         dev->kernel_buffer_size = 0;
         dev->kernel_buffer = NULL;
