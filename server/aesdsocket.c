@@ -379,8 +379,8 @@ static void * socket_thread(void * args)
 
         if(USE_AESD_CHAR_DEVICE)
         {
-            fp = fopen(AESD_DEVICE, "ab");
-            if(fp == NULL)
+            thread_args->file_pointer = fopen(AESD_DEVICE, "ab");
+            if(thread_args->file_pointer == NULL)
             {
                 // failure to open driver
                 syslog(LOG_ERR, "Failed to open the driver!");
@@ -389,7 +389,7 @@ static void * socket_thread(void * args)
         }
         //fprintf(stdout, "Socket Thread: Grabbed mutex, writing data!\n");
         store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, thread_args->file_pointer);
-        fclose(fp);
+        fclose(thread_args->file_pointer);
 
         pthread_mutex_unlock(thread_args->file_mutex);
         //fprintf(stdout, "Socket Thread: Mutex unlocked!\n");
@@ -420,8 +420,8 @@ static void * socket_thread(void * args)
     
     if(USE_AESD_CHAR_DEVICE)
     {
-        fp = fopen(AESD_DEVICE, "r");
-        if(fp == NULL)
+        thread_args->file_pointer = fopen(AESD_DEVICE, "r");
+        if(thread_args->file_pointer == NULL)
         {
             // failure to open driver
             syslog(LOG_ERR, "Failed to open the driver!");
@@ -461,7 +461,7 @@ static void * socket_thread(void * args)
     //fprintf(stdout, "Done sending\n");
 
     thread_args->done_flag = true;
-    fclose(fp);
+    fclose(thread_args->file_pointer);
     return 0;
 }
 
