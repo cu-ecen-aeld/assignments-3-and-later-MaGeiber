@@ -352,7 +352,7 @@ static void * socket_thread(void * args)
         if(thread_args->file_pointer == NULL)
         {
             // failure to open driver
-            syslog(LOG_ERR, "Failed to open the driver!");
+            syslog(LOG_ERR, "Failed to open the driver during write!");
             //cleanup(fp, socket_handle, connected_handle, -1);
         }
     }
@@ -425,14 +425,23 @@ static void * socket_thread(void * args)
         if(thread_args->file_pointer == NULL)
         {
             // failure to open driver
-            syslog(LOG_ERR, "Failed to open the driver!");
+            syslog(LOG_ERR, "Failed to open the driver during read!");
             //cleanup(fp, socket_handle, connected_handle, -1);
         }
     }
-    size_t bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, thread_args->file_pointer);
-    
+    //size_t bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, thread_args->file_pointer);
+    char temp_char;
+    size_t current_buffer_char = 0;
+    do
+    {
+        temp_char = fgetc(thread_args->file_pointer);
+        buffer[current_buffer_char] = temp_char;
+        current_buffer_char++;
+    } while (temp_char != EOF && current_buffer_char < BUFFER_SIZE);
+    //syslog(LOG_NOTICE, "Done reading characters, found: %li", current_buffer_char);
+    size_t bytes_read = current_buffer_char;
     //fprintf(stdout, "Socket Thread: Unlocked mutex!\n");
-    while(bytes_read > 0)
+    if(bytes_read > 0)
     {
         size_t read_until = bytes_read;
         //char *found_char = strchr(buffer, '\n');
@@ -446,20 +455,23 @@ static void * socket_thread(void * args)
             
             if(send_return > 0)
             {
+                //syslog(LOG_NOTICE, "Sent characters: %li", current_buffer_char);
                 bytes_sent += send_return;
             }
             else
             {
+                //syslog(LOG_NOTICE, "Send fail");
                 //fprintf(stdout, "Send Failure, return val: %ld\n", send_return);
                 thread_args->done_flag = true;
                 return 0;
             }
         }
-        bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, thread_args->file_pointer);
+        //bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, thread_args->file_pointer);
         bytes_sent = 0;
     }
     pthread_mutex_unlock(thread_args->file_mutex);
     //fprintf(stdout, "Done sending\n");
+    //syslog(LOG_NOTICE, "Done sending, mutex unlocked");
 
     thread_args->done_flag = true;
     fclose(thread_args->file_pointer);
