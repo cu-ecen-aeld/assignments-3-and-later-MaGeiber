@@ -67,6 +67,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     if(mutex_ret != 0)
     {
         // couldn't lock the mutex, something happened, return a fault
+        PDEBUG("Failure to lock mutex in read");
         return -EFAULT;
     }
 
@@ -75,6 +76,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 
     if(read_entry == NULL)
     {
+        PDEBUG("Hit end of available data in read");
         *f_pos = 0;
         goto release_mutex;
     }
@@ -94,7 +96,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     }
 
     // copy data to user space
-    copy_user_return = copy_to_user(buf, read_entry->buffptr + entry_offset_byte, bytes_to_copy);
+    copy_user_return = copy_to_user(buf, &read_entry->buffptr[entry_offset_byte], bytes_to_copy);
 
     // update return value to number of bytes read, which would be: number of bytes to copy - bytes that did not copy to user space
     retval = bytes_to_copy - copy_user_return;

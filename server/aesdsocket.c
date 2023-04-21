@@ -339,6 +339,7 @@ static void * socket_thread(void * args)
     struct socket_thread_args *thread_args;
     int store_return;
     thread_args = (struct socket_thread_args *)args;
+    FILE * fp_char = NULL;
 
     //fprintf(stdout, "Socket Thread: Thread started: %lu!\n", thread_args->thread_id);
 
@@ -348,8 +349,8 @@ static void * socket_thread(void * args)
     //bool found_newline = false;
     if(USE_AESD_CHAR_DEVICE)
     {
-        thread_args->file_pointer = fopen(AESD_DEVICE, "ab");
-        if(thread_args->file_pointer == NULL)
+        fp_char= fopen(AESD_DEVICE, "ab");
+        if(fp_char == NULL)
         {
             // failure to open driver
             syslog(LOG_ERR, "Failed to open the driver during write!");
@@ -366,12 +367,10 @@ static void * socket_thread(void * args)
         bytes_received = recv(thread_args->connected_handle, &buffer[buffer_bytes_used], buffer_bytes_remaining, 0);
         if(bytes_received > 0)
         {
-            //fprintf(stdout, "Received %ld bytes\n", bytes_received);
             buffer_bytes_used += bytes_received;
         }
         else if(bytes_received < 0)
         {
-            //fprintf(stdout, "Received error: %ld, errno: %d\n", bytes_received, errno);
             thread_args->done_flag = true;
             return 0;
         }
@@ -379,20 +378,12 @@ static void * socket_thread(void * args)
         {
             continue;
         }
-
-        // check the buffer for newline, append when newline hit
-        // check if buffer is full, flush to file, start over
-        //found_newline = (strchr(buffer, '\n') != NULL) ? true : false;
-
-        //fprintf(stdout, "Found newline: %d\n", found_newline);
         
         pthread_mutex_lock(thread_args->file_mutex);
 
-        //fprintf(stdout, "Socket Thread: Grabbed mutex, writing data!\n");
-        store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, thread_args->file_pointer);
+        store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, fp_char);
 
         pthread_mutex_unlock(thread_args->file_mutex);
-        //fprintf(stdout, "Socket Thread: Mutex unlocked!\n");
 
         if(store_return == EOF)
         {
@@ -400,13 +391,13 @@ static void * socket_thread(void * args)
             thread_args->done_flag = true;
             return 0;
         }
-        //fprintf(stdout, "Stored message\n");
+
         buffer_bytes_used = 0;
         memset(&buffer, 0, sizeof(buffer));
 
     } while (bytes_received > 0);
-    //fprintf(stdout, "Done receiving\n");
-    fclose(thread_args->file_pointer);
+
+    fclose(fp_char);
     
     pthread_mutex_lock(thread_args->file_mutex);
     //fprintf(stdout, "Socket Thread: Grabbed mutex, reading back!\n");
@@ -416,65 +407,55 @@ static void * socket_thread(void * args)
     // {
     //     //fprintf(stdout, "Failed to seek while reading: %d\n", errno);
     // }
-    ssize_t bytes_sent = 0;
+
     memset(&buffer, 0, sizeof(buffer));
     
     if(USE_AESD_CHAR_DEVICE)
     {
-        thread_args->file_pointer = fopen(AESD_DEVICE, "r");
-        if(thread_args->file_pointer == NULL)
+        fp_char = fopen(AESD_DEVICE, "r");
+        if(fp_char == NULL)
         {
             // failure to open driver
             syslog(LOG_ERR, "Failed to open the driver during read!");
-            //cleanup(fp, socket_handle, connected_handle, -1);
         }
     }
-    //size_t bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, thread_args->file_pointer);
-    char temp_char;
-    size_t current_buffer_char = 0;
-    do
+
+    ssize_t bytes_sent = 0;
+    size_t bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, fp_char);
+    syslog(LOG_NOTICE, "Done reading characters, found: %li", bytes_read);
+
+    while(bytes_read > 0)
     {
-        temp_char = fgetc(thread_args->file_pointer);
-        buffer[current_buffer_char] = temp_char;
-        current_buffer_char++;
-    } while (temp_char != EOF && current_buffer_char < BUFFER_SIZE);
-    //syslog(LOG_NOTICE, "Done reading characters, found: %li", current_buffer_char);
-    size_t bytes_read = current_buffer_char;
-    //fprintf(stdout, "Socket Thread: Unlocked mutex!\n");
-    if(bytes_read > 0)
-    {
-        size_t read_until = bytes_read;
-        //char *found_char = strchr(buffer, '\n');
+        size_t read_until = bytes_read + 1;
 
         // iterate through the buffer, until finished sending
         ssize_t send_return = 0;
         while(bytes_sent < read_until)
         {
-            //fprintf(stdout, "Sending bytes until: %lu\n", read_until);
             send_return = send(thread_args->connected_handle, &buffer[bytes_sent], read_until, 0);
             
-            if(send_return > 0)
+            if(send_return >= 0)
             {
-                //syslog(LOG_NOTICE, "Sent characters: %li", current_buffer_char);
+                syslog(LOG_NOTICE, "Sent characters: %li", send_return);
                 bytes_sent += send_return;
             }
             else
             {
-                //syslog(LOG_NOTICE, "Send fail");
-                //fprintf(stdout, "Send Failure, return val: %ld\n", send_return);
+                syslog(LOG_NOTICE, "Send fail");
                 thread_args->done_flag = true;
                 return 0;
             }
         }
-        //bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, thread_args->file_pointer);
+        bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, fp_char);
+        syslog(LOG_NOTICE, "read more characters, found: %li", bytes_read);
         bytes_sent = 0;
     }
+    fclose(fp_char);
     pthread_mutex_unlock(thread_args->file_mutex);
-    //fprintf(stdout, "Done sending\n");
-    //syslog(LOG_NOTICE, "Done sending, mutex unlocked");
 
+    syslog(LOG_NOTICE, "Done sending, mutex unlocked");
     thread_args->done_flag = true;
-    fclose(thread_args->file_pointer);
+    
     return 0;
 }
 
