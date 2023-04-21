@@ -322,10 +322,6 @@ static void cleanup(FILE * file_pointer, int socket_handle, int connected_handle
     {
         remove(CONN_FILE);
     }
-    else
-    {
-        fclose(fp);
-    }
     
     exit(exit_status);
 }
@@ -341,12 +337,10 @@ static void * socket_thread(void * args)
     thread_args = (struct socket_thread_args *)args;
     FILE * fp_char = NULL;
 
-    //fprintf(stdout, "Socket Thread: Thread started: %lu!\n", thread_args->thread_id);
-
     // receive data from connection and append to file
     buffer_bytes_used = 0;
     memset(&buffer, 0, sizeof(buffer));
-    //bool found_newline = false;
+
     if(USE_AESD_CHAR_DEVICE)
     {
         fp_char= fopen(AESD_DEVICE, "ab");
@@ -354,48 +348,42 @@ static void * socket_thread(void * args)
         {
             // failure to open driver
             syslog(LOG_ERR, "Failed to open the driver during write!");
-            //cleanup(fp, socket_handle, connected_handle, -1);
         }
     }
 
-    do
+    // In the future, this could be adjusted for receiving larger amounts than the buffer..but I had some annoying blocking here
+    bytes_received = 0;
+    buffer_bytes_remaining = sizeof( buffer ) - buffer_bytes_used;
+
+    // receive up to what is remaining in the buffer
+    bytes_received = recv(thread_args->connected_handle, &buffer[buffer_bytes_used], buffer_bytes_remaining, 0);
+    if(bytes_received > 0)
     {
-        bytes_received = 0;
-        buffer_bytes_remaining = sizeof( buffer ) - buffer_bytes_used;
+        buffer_bytes_used += bytes_received;
+    }
+    else if(bytes_received < 0)
+    {
+        syslog(LOG_ERR, "Error occurred when receiving from socket");
+        thread_args->done_flag = true;
+        fclose(fp_char);
+        return 0;
+    }
     
-        // receive up to what is remaining in the buffer
-        bytes_received = recv(thread_args->connected_handle, &buffer[buffer_bytes_used], buffer_bytes_remaining, 0);
-        if(bytes_received > 0)
-        {
-            buffer_bytes_used += bytes_received;
-        }
-        else if(bytes_received < 0)
-        {
-            thread_args->done_flag = true;
-            return 0;
-        }
-        else
-        {
-            continue;
-        }
-        
-        pthread_mutex_lock(thread_args->file_mutex);
+    pthread_mutex_lock(thread_args->file_mutex);
 
-        store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, fp_char);
+    store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, fp_char);
 
-        pthread_mutex_unlock(thread_args->file_mutex);
+    pthread_mutex_unlock(thread_args->file_mutex);
 
-        if(store_return == EOF)
-        {
-            syslog(LOG_ERR, "Failed to append to file!");
-            thread_args->done_flag = true;
-            return 0;
-        }
+    if(store_return == EOF)
+    {
+        syslog(LOG_ERR, "Failed to append to file!");
+        thread_args->done_flag = true;
+        return 0;
+    }
 
-        buffer_bytes_used = 0;
-        memset(&buffer, 0, sizeof(buffer));
-
-    } while (bytes_received > 0);
+    //buffer_bytes_used = 0;
+    //memset(&buffer, 0, sizeof(buffer));
 
     fclose(fp_char);
     
@@ -426,7 +414,7 @@ static void * socket_thread(void * args)
 
     while(bytes_read > 0)
     {
-        size_t read_until = bytes_read + 1;
+        size_t read_until = bytes_read;
 
         // iterate through the buffer, until finished sending
         ssize_t send_return = 0;
@@ -434,7 +422,7 @@ static void * socket_thread(void * args)
         {
             send_return = send(thread_args->connected_handle, &buffer[bytes_sent], read_until, 0);
             
-            if(send_return >= 0)
+            if(send_return > 0)
             {
                 syslog(LOG_NOTICE, "Sent characters: %li", send_return);
                 bytes_sent += send_return;
