@@ -105,3 +105,45 @@ void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
 {
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
 }
+
+/**
+* Gets the total size of the circular buffer described by @param buffer
+*/
+size_t aesd_circular_buffer_get_total_size(struct aesd_circular_buffer *buffer)
+{
+    uint8_t i;
+    size_t total_size = 0;
+
+    for(i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++)
+    {
+        total_size += buffer->entry[i].size;
+    }
+    return total_size;
+}
+
+/* Checks if the write command and offset given are valid for our current circular buffer */
+bool aesd_circular_buffer_is_write_cmd_valid(struct aesd_circular_buffer *buffer, unsigned int write_cmd, unsigned int write_cmd_offset)
+{
+    return buffer->entry[write_cmd].buffptr != NULL && buffer->entry[write_cmd].size >= write_cmd_offset;
+}
+
+/* 
+* Calculate the offset based on a given write command and write command offset. 
+* Note: This assumes we have already checked for validity!
+*/
+unsigned long aesd_circular_buffer_get_offset_from_write_cmd(struct aesd_circular_buffer *buffer, unsigned long write_cmd, unsigned long write_cmd_offset)
+{
+    uint8_t i;
+    unsigned long offset = 0;
+
+    for(i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++)
+    {
+        if(i == write_cmd)
+        {
+            offset += write_cmd_offset;
+            break;
+        }
+        offset += buffer->entry[i].size;
+    }
+    return offset;
+}

@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include "../aesd-char-driver/aesd_ioctl.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -21,6 +22,7 @@
 #define CONN_FILE "/var/tmp/aesdsocketdata"
 #define AESD_DEVICE "/dev/aesdchar"
 #define BUFFER_SIZE 1024
+#define IOC_CMD "AESDCHAR_IOCSEEKTO:"
 
 static bool graceful_exit = false;
 static pthread_mutex_t file_mutex;
@@ -334,6 +336,13 @@ static void * socket_thread(void * args)
     char buffer[BUFFER_SIZE];
     struct socket_thread_args *thread_args;
     int store_return;
+    int fd_driver;
+    struct aesd_seekto seekto;
+    char * keyword;
+    char * write_cmd;
+    char * write_cmd_offset;
+    unsigned long write_cmd_unsigned;
+    unsigned long write_cmd_offset_unsigned;
     thread_args = (struct socket_thread_args *)args;
     FILE * fp_char = NULL;
 
@@ -371,7 +380,31 @@ static void * socket_thread(void * args)
     
     pthread_mutex_lock(thread_args->file_mutex);
 
-    store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, fp_char);
+    // intercept ioctl command and don't send if that's what was received
+    fd_driver = fileno(fp_char);
+
+    // if string contains the command, parse it and use ioctl
+    if(strstr(buffer, IOC_CMD) != NULL)
+    {
+        // split out the commands
+        keyword = strtok(buffer, ":");
+        write_cmd = strtok(NULL, ",");
+        write_cmd_offset = strtok(NULL, ",");
+        syslog(LOG_NOTICE, "ioctl cmd received: %s, %s", write_cmd, write_cmd_offset);
+
+        // convert to numbers
+        seekto.write_cmd = strtoul(write_cmd, NULL, 10);
+        seekto.write_cmd_offset = strtoul(write_cmd_offset, NULL, 10);
+        syslog(LOG_NOTICE, "ioctl cmd values: %ld, %ld", write_cmd_unsigned, write_cmd_offset_unsigned);
+        
+        // send the command
+        int result_ret = ioctl(fd_driver, AESDCHAR_IOCSEEKTO, &seekto);
+    }
+    // otherwise, just write what was sent
+    else
+    {
+        store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, fp_char);
+    }
 
     pthread_mutex_unlock(thread_args->file_mutex);
 
@@ -385,7 +418,7 @@ static void * socket_thread(void * args)
     //buffer_bytes_used = 0;
     //memset(&buffer, 0, sizeof(buffer));
 
-    fclose(fp_char);
+    //fclose(fp_char);
     
     pthread_mutex_lock(thread_args->file_mutex);
     //fprintf(stdout, "Socket Thread: Grabbed mutex, reading back!\n");
@@ -398,15 +431,18 @@ static void * socket_thread(void * args)
 
     memset(&buffer, 0, sizeof(buffer));
     
-    if(USE_AESD_CHAR_DEVICE)
-    {
-        fp_char = fopen(AESD_DEVICE, "r");
-        if(fp_char == NULL)
-        {
-            // failure to open driver
-            syslog(LOG_ERR, "Failed to open the driver during read!");
-        }
-    }
+    // if(USE_AESD_CHAR_DEVICE)
+    // {
+    //     fp_char = fopen(AESD_DEVICE, "r");
+    //     if(fp_char == NULL)
+    //     {
+    //         // failure to open driver
+    //         syslog(LOG_ERR, "Failed to open the driver during read!");
+    //     }
+    // }
+
+    // seek back to the start
+    fseek(fp_char, 0, SEEK_SET);
 
     ssize_t bytes_sent = 0;
     size_t bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, fp_char);
