@@ -352,7 +352,7 @@ static void * socket_thread(void * args)
 
     if(USE_AESD_CHAR_DEVICE)
     {
-        fp_char= fopen(AESD_DEVICE, "ab");
+        fp_char= fopen(AESD_DEVICE, "a+");
         if(fp_char == NULL)
         {
             // failure to open driver
@@ -395,15 +395,16 @@ static void * socket_thread(void * args)
         // convert to numbers
         seekto.write_cmd = strtoul(write_cmd, NULL, 10);
         seekto.write_cmd_offset = strtoul(write_cmd_offset, NULL, 10);
-        syslog(LOG_NOTICE, "ioctl cmd values: %ld, %ld", write_cmd_unsigned, write_cmd_offset_unsigned);
+        syslog(LOG_NOTICE, "ioctl cmd values: %d, %d", seekto.write_cmd, seekto.write_cmd_offset);
         
         // send the command
         int result_ret = ioctl(fd_driver, AESDCHAR_IOCSEEKTO, &seekto);
     }
-    // otherwise, just write what was sent
+    // otherwise, just write what was sent, then seek to the start for the read that follows
     else
     {
         store_return = fwrite(buffer, sizeof(char), buffer_bytes_used, fp_char);
+        fseek(fp_char, 0, SEEK_SET);
     }
 
     pthread_mutex_unlock(thread_args->file_mutex);
@@ -414,35 +415,10 @@ static void * socket_thread(void * args)
         thread_args->done_flag = true;
         return 0;
     }
-
-    //buffer_bytes_used = 0;
-    //memset(&buffer, 0, sizeof(buffer));
-
-    //fclose(fp_char);
     
     pthread_mutex_lock(thread_args->file_mutex);
-    //fprintf(stdout, "Socket Thread: Grabbed mutex, reading back!\n");
-    // send content of file back to sender
-    // int seek_return = fseek(thread_args->file_pointer, 0, SEEK_SET);
-    // if(seek_return < 0)
-    // {
-    //     //fprintf(stdout, "Failed to seek while reading: %d\n", errno);
-    // }
 
     memset(&buffer, 0, sizeof(buffer));
-    
-    // if(USE_AESD_CHAR_DEVICE)
-    // {
-    //     fp_char = fopen(AESD_DEVICE, "r");
-    //     if(fp_char == NULL)
-    //     {
-    //         // failure to open driver
-    //         syslog(LOG_ERR, "Failed to open the driver during read!");
-    //     }
-    // }
-
-    // seek back to the start
-    fseek(fp_char, 0, SEEK_SET);
 
     ssize_t bytes_sent = 0;
     size_t bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, fp_char);

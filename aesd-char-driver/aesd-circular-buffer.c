@@ -124,7 +124,9 @@ size_t aesd_circular_buffer_get_total_size(struct aesd_circular_buffer *buffer)
 /* Checks if the write command and offset given are valid for our current circular buffer */
 bool aesd_circular_buffer_is_write_cmd_valid(struct aesd_circular_buffer *buffer, unsigned int write_cmd, unsigned int write_cmd_offset)
 {
-    return buffer->entry[write_cmd].buffptr != NULL && buffer->entry[write_cmd].size >= write_cmd_offset;
+    return (write_cmd < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)
+           && (buffer->entry[write_cmd].buffptr != NULL)
+           && (buffer->entry[write_cmd].size > write_cmd_offset);
 }
 
 /* 

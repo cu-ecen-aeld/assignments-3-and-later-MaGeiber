@@ -259,13 +259,12 @@ long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 static long aesd_adjust_file_offset(struct file *filp, unsigned int write_cmd, unsigned int write_cmd_offset)
 {
     int mutex_ret;
-    long retval;
+    long retval = 0;
     struct aesd_dev *dev = filp->private_data;
 
     // bounds check on write command
     // out of range, non-existant command, offset >= command size
-    if(write_cmd <= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED
-       && aesd_circular_buffer_is_write_cmd_valid(&dev->circ_buffer, write_cmd, write_cmd_offset))
+    if(!aesd_circular_buffer_is_write_cmd_valid(&dev->circ_buffer, write_cmd, write_cmd_offset))
     {
         PDEBUG("ioctl file offset adjust error: Write command out of range");
         return -EINVAL;
@@ -283,6 +282,7 @@ static long aesd_adjust_file_offset(struct file *filp, unsigned int write_cmd, u
 
     // get the new fpos
     filp->f_pos = aesd_circular_buffer_get_offset_from_write_cmd(&dev->circ_buffer, write_cmd, write_cmd_offset);
+    PDEBUG("adjusted file offset to fpos: %lld", filp->f_pos);
 
     // release mutex, always
     release_mutex:
